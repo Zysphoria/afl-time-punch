@@ -1,0 +1,16 @@
+{
+  "name": "afl-time-punch",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "postinstall": "node -e \"require('fs').mkdirSync('data', { recursive: true })\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -34,8 +34,12 @@ function weekLabel(monday: string): string {
   const start = new Date(monday + 'T00:00:00');
   const end = new Date(monday + 'T00:00:00');
   end.setDate(end.getDate() + 6);
-  const monthName = start.toLocaleString('en-US', { month: 'short' });
-  return `${monthName} ${start.getDate()}–${end.getDate()} ${start.getFullYear()}`;
+  const startMonth = start.toLocaleString('en-US', { month: 'short' });
+  const endMonth = end.toLocaleString('en-US', { month: 'short' });
+  if (startMonth === endMonth) {
+    return `${startMonth} ${start.getDate()}–${end.getDate()} ${start.getFullYear()}`;
+  }
+  return `${startMonth} ${start.getDate()} – ${endMonth} ${end.getDate()} ${end.getFullYear()}`;
 }
 
 function formatTime(iso: string | null): string {
@@ -164,8 +168,14 @@ router.get('/', async (req: Request, res: Response) => {
   const filename = weekParam ? `timepunch-${weekParam}.xlsx` : 'timepunch-all.xlsx';
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  await workbook.xlsx.write(res);
-  res.end();
+  try {
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Export failed.' });
+    }
+  }
 });
 
 export default router;

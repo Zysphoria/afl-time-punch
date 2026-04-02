@@ -77,6 +77,9 @@ router.patch('/:id', (req: Request, res: Response) => {
   let pauses: Pause[] = JSON.parse(row.pauses);
 
   if ('clock_out' in body && !('clock_in' in body)) {
+    if (row.clock_out) {
+      return res.status(409).json({ error: 'Session is already clocked out.' });
+    }
     const clockOut = body.clock_out;
     pauses = pauses.map(p => (!p.end ? { ...p, end: clockOut } : p));
     const durationSecs = computeDurationSecs(row.clock_in, clockOut, pauses);
@@ -103,10 +106,15 @@ router.patch('/:id', (req: Request, res: Response) => {
       end: body.pause_end,
       ...(body.comment ? { comment: body.comment } : {}),
     };
-    const durationSecs = computeDurationSecs(row.clock_in, row.clock_out, pauses);
-    db.prepare(
-      'UPDATE sessions SET pauses = ?, duration_secs = ? WHERE id = ?'
-    ).run(JSON.stringify(pauses), durationSecs, id);
+    const pausesJson = JSON.stringify(pauses);
+    if (row.clock_out) {
+      const durationSecs = computeDurationSecs(row.clock_in, row.clock_out, pauses);
+      db.prepare(
+        'UPDATE sessions SET pauses = ?, duration_secs = ? WHERE id = ?'
+      ).run(pausesJson, durationSecs, id);
+    } else {
+      db.prepare('UPDATE sessions SET pauses = ? WHERE id = ?').run(pausesJson, id);
+    }
   } else if ('clock_in' in body) {
     const newClockIn = body.clock_in;
     const newClockOut = body.clock_out ?? row.clock_out ?? null;

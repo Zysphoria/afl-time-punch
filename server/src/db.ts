@@ -41,15 +41,10 @@ function migrate(db: Database.Database): void {
 
 export function resetDb(): void {
   if (_db) {
-    _db.close();
-    _db = null;
+    _db.exec('DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS settings;');
+    migrate(_db);
+  } else {
+    _db = new Database(getDbPath());
+    migrate(_db);
   }
-  const db = new Database(getDbPath());
-  db.exec(`
-    DROP TABLE IF EXISTS sessions;
-    DROP TABLE IF EXISTS settings;
-  `);
-  migrate(db);
-  db.close();
-  _db = null;
 }

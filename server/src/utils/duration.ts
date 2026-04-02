@@ -11,7 +11,8 @@ export function computeDurationSecs(
 
   const pauseMs = pauses.reduce((sum, p) => {
     if (!p.end) return sum;
-    return sum + (new Date(p.end).getTime() - new Date(p.start).getTime());
+    const contribution = new Date(p.end).getTime() - new Date(p.start).getTime();
+    return sum + Math.max(0, contribution);
   }, 0);
 
   return Math.max(0, Math.floor((totalMs - pauseMs) / 1000));

@@ -30,11 +30,15 @@ export function ImportModal({ onImported, onCancel }: Props) {
   const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // Store the File object in state — the <input> is unmounted when step changes,
+  // which nullifies the ref, so we can't re-read it from the DOM later.
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handlePreview() {
     const file = fileRef.current?.files?.[0];
     if (!file) { setError('Please select an .xlsx file.'); return; }
+    setSelectedFile(file);
     setError('');
     setBusy(true);
     try {
@@ -74,8 +78,8 @@ export function ImportModal({ onImported, onCancel }: Props) {
       setError('Date, Start, and End columns are required.');
       return;
     }
-    const file = fileRef.current?.files?.[0];
-    if (!file) return;
+    const file = selectedFile;
+    if (!file) { setError('No file selected — please go back and choose a file.'); return; }
     setError('');
     setBusy(true);
     try {

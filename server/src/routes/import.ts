@@ -11,12 +11,9 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
   fileFilter: (_req, file, cb) => {
-    const hasXlsxExt = file.originalname.toLowerCase().endsWith('.xlsx');
-    const hasValidMime =
-      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      file.mimetype === 'application/octet-stream' ||
-      file.mimetype === 'application/zip';
-    cb(null, hasXlsxExt && hasValidMime);
+    // Only check extension — MIME type for .xlsx varies across browsers/OS and
+    // is unreliable for files with Microsoft Information Protection metadata.
+    cb(null, file.originalname.toLowerCase().endsWith('.xlsx'));
   },
 });
 

@@ -78,7 +78,15 @@ export function TopBar({
 
   return (
     <div className="top-bar">
-      <span className="app-name">AFL Time Punch</span>
+      <span className="app-name">
+        AFL Time Punch
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        {(window as any).electronAPI?.version && (
+          <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.55, marginLeft: 6 }}>
+            v{(window as any).electronAPI.version}
+          </span>
+        )}
+      </span>
 
       <span className={timerClass}>
         {formatDuration(activeSession ? elapsed : 0)}

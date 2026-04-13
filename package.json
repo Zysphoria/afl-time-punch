@@ -2,15 +2,52 @@
   "name": "afl-time-punch",
   "version": "1.0.0",
   "private": true,
+  "main": "dist-electron/main.js",
   "workspaces": [
     "client",
     "server"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
-    "postinstall": "node -e \"require('fs').mkdirSync('data', { recursive: true })\""
+    "dev": "concurrently --kill-others --names server,client,electron \"npm run dev --workspace=server\" \"npm run dev --workspace=client\" \"npm run electron:dev\"",
+    "electron:dev": "tsc -p electron/tsconfig.json && wait-on http://localhost:5173 http://localhost:3001/api/health && cross-env NODE_ENV=development electron .",
+    "build": "npm run build --workspace=client && npm run build --workspace=server && tsc -p electron/tsconfig.json",
+    "dist:win": "npm run build && electron-builder --win",
+    "postinstall": "node -e \"require('fs').mkdirSync('data', { recursive: true })\" && electron-rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.3"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@electron/rebuild": "^3.6.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^31.0.0",
+    "electron-builder": "^25.0.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.afl.timepunch",
+    "productName": "AFL Time Punch",
+    "directories": {
+      "output": "C:\\Users\\hunte\\Desktop\\afl-release"
+    },
+    "asar": false,
+    "files": [
+      "dist-electron/**/*",
+      "server/package.json",
+      "server/dist/**/*",
+      "client/dist/**/*",
+      "node_modules/**/*",
+      "server/node_modules/**/*"
+    ],
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

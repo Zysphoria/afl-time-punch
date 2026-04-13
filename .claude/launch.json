@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Express Server",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "server/src/index.ts"],
+      "port": 3001
+    },
+    {
+      "name": "Vite Client",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "client", "--host"],
+      "port": 5173
+    }
+  ]
+}

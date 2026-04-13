@@ -1,7 +1,8 @@
 .worktrees/
 node_modules/
 data/
-dist/
+/dist/
+dist-electron/
 .env
 *.db
 .superpowers/

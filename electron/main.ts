@@ -77,15 +77,6 @@ function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-not-available', () => {
-    dialog.showMessageBox({
-      type: 'info',
-      title: 'Up to Date',
-      message: `AFL Time Punch v${app.getVersion()} is the latest version.`,
-      buttons: ['OK'],
-    });
-  });
-
   autoUpdater.on('update-available', (info) => {
     dialog.showMessageBox({
       type: 'info',

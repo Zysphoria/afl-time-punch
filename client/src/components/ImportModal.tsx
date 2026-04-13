@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { previewImportHeaders, importSessions } from '../api.js';
+import type { HeaderEntry } from '../api.js';
 
 interface Props {
   onImported: () => void;
@@ -17,7 +18,7 @@ interface ColumnMap {
 
 export function ImportModal({ onImported, onCancel }: Props) {
   const [step, setStep] = useState<Step>('upload');
-  const [headers, setHeaders] = useState<string[]>([]);
+  const [headers, setHeaders] = useState<HeaderEntry[]>([]);
   const [colMap, setColMap] = useState<ColumnMap>({ dateCol: '', clockInCol: '', clockOutCol: '', breakCol: '' });
   const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
   const [error, setError] = useState('');
@@ -36,11 +37,11 @@ export function ImportModal({ onImported, onCancel }: Props) {
       setHeaders(cols);
       // Auto-detect common column names
       const find = (patterns: string[]) =>
-        cols.find(c => patterns.some(p => c.toLowerCase().includes(p))) ?? '';
+        cols.find(h => patterns.some(p => h.name.toLowerCase().includes(p)))?.name ?? '';
       setColMap({
         dateCol: find(['date']),
-        clockInCol: find(['start', 'clock in', 'clock-in', 'in']),
-        clockOutCol: find(['end', 'clock out', 'clock-out', 'out']),
+        clockInCol: find(['time in', 'start', 'clock in', 'clock-in']),
+        clockOutCol: find(['time out', 'end', 'clock out', 'clock-out']),
         breakCol: find(['break', 'pause', 'comment', 'lunch']),
       });
       setStep('map');
@@ -63,12 +64,14 @@ export function ImportModal({ onImported, onCancel }: Props) {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      fd.append('dateCol', String(headers.indexOf(colMap.dateCol)));
-      fd.append('clockInCol', String(headers.indexOf(colMap.clockInCol)));
-      fd.append('clockOutCol', String(headers.indexOf(colMap.clockOutCol)));
-      // Only send breakCol when a column is actually selected — empty string would produce -1
+      // Use the raw sheet index from the HeaderEntry — avoids indexOf misalignment on
+      // sheets where blank columns exist between data columns.
+      fd.append('dateCol',    String(headers.find(h => h.name === colMap.dateCol)?.index    ?? 0));
+      fd.append('clockInCol',  String(headers.find(h => h.name === colMap.clockInCol)?.index  ?? 1));
+      fd.append('clockOutCol', String(headers.find(h => h.name === colMap.clockOutCol)?.index ?? 2));
       if (colMap.breakCol) {
-        fd.append('breakCol', String(headers.indexOf(colMap.breakCol)));
+        const idx = headers.find(h => h.name === colMap.breakCol)?.index;
+        if (idx !== undefined) fd.append('breakCol', String(idx));
       }
       const res = await importSessions(fd);
       setResult(res);
@@ -91,7 +94,7 @@ export function ImportModal({ onImported, onCancel }: Props) {
           style={{ cursor: 'pointer' }}
         >
           <option value="">— select column —</option>
-          {headers.map((h, i) => <option key={i} value={h}>{h}</option>)}
+          {headers.map((h, i) => <option key={i} value={h.name}>{h.name}</option>)}
         </select>
       </label>
     );

@@ -37,9 +37,11 @@ export async function importSessions(formData: FormData): Promise<{ imported: nu
   return handleResponse<{ imported: number; skipped: number }>(res);
 }
 
-export async function previewImportHeaders(formData: FormData): Promise<string[]> {
+export interface HeaderEntry { name: string; index: number; }
+
+export async function previewImportHeaders(formData: FormData): Promise<HeaderEntry[]> {
   const res = await fetch(`${BASE}/import?preview=true`, { method: 'POST', body: formData });
-  return handleResponse<string[]>(res);
+  return handleResponse<HeaderEntry[]>(res);
 }
 
 export async function clockOut(id: number): Promise<Session> {

@@ -328,10 +328,44 @@ html, body, #root {
   color: var(--text-primary);
   padding: 4px 8px;
   font-size: 13px;
-  width: 100px;
+  width: 130px;
 }
 
 .time-input:focus { outline: none; border-color: var(--blue); }
+
+/* Remove the native dropdown/clock picker */
+.time-input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* Make all time segments (hh, mm, AM/PM) clearly visible */
+.time-input::-webkit-datetime-edit {
+  color: var(--text-primary);
+}
+
+.time-input::-webkit-datetime-edit-fields-wrapper {
+  color: var(--text-primary);
+}
+
+.time-input::-webkit-datetime-edit-hour-field,
+.time-input::-webkit-datetime-edit-minute-field,
+.time-input::-webkit-datetime-edit-ampm-field {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.time-input::-webkit-datetime-edit-hour-field:focus,
+.time-input::-webkit-datetime-edit-minute-field:focus,
+.time-input::-webkit-datetime-edit-ampm-field:focus {
+  background: var(--blue);
+  color: #0d1117;
+  border-radius: 2px;
+  outline: none;
+}
+
+.time-input::-webkit-datetime-edit-text {
+  color: var(--text-muted);
+}
 
 /* ── Week Summary ─────────────────────────────────────────────────────────── */
 

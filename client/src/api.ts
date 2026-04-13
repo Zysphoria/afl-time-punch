@@ -32,16 +32,46 @@ export async function createManualSession(clockInISO: string, clockOutISO: strin
   return handleResponse<Session>(res);
 }
 
-export async function importSessions(formData: FormData): Promise<{ imported: number; skipped: number }> {
-  const res = await fetch(`${BASE}/import`, { method: 'POST', body: formData });
+export interface ImportOptions {
+  dateCol: number;
+  clockInCol: number;
+  clockOutCol: number;
+  breakCol?: number | null;
+  lunchStartCol?: number | null;
+  lunchEndCol?: number | null;
+}
+
+export async function importSessions(
+  file: File,
+  opts: ImportOptions,
+): Promise<{ imported: number; skipped: number }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('dateCol',    String(opts.dateCol));
+  fd.append('clockInCol',  String(opts.clockInCol));
+  fd.append('clockOutCol', String(opts.clockOutCol));
+  if (opts.breakCol      != null) fd.append('breakCol',      String(opts.breakCol));
+  if (opts.lunchStartCol != null) fd.append('lunchStartCol', String(opts.lunchStartCol));
+  if (opts.lunchEndCol   != null) fd.append('lunchEndCol',   String(opts.lunchEndCol));
+  const res = await fetch(`${BASE}/import`, { method: 'POST', body: fd });
   return handleResponse<{ imported: number; skipped: number }>(res);
 }
 
 export interface HeaderEntry { name: string; index: number; }
 
-export async function previewImportHeaders(formData: FormData): Promise<HeaderEntry[]> {
+export interface PreviewResult {
+  headers: HeaderEntry[];
+  dateCol: number | null;
+  clockInCol: number | null;
+  clockOutCol: number | null;
+  breakCol: number | null;
+  lunchStartCol: number | null;
+  lunchEndCol: number | null;
+}
+
+export async function previewImportHeaders(formData: FormData): Promise<PreviewResult> {
   const res = await fetch(`${BASE}/import?preview=true`, { method: 'POST', body: formData });
-  return handleResponse<HeaderEntry[]>(res);
+  return handleResponse<PreviewResult>(res);
 }
 
 export async function clockOut(id: number): Promise<Session> {

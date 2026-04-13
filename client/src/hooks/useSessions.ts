@@ -111,8 +111,8 @@ export function useSessions() {
     }
   }, []);
 
-  const importFromFile = useCallback(async (formData: FormData) => {
-    const result = await apiImport(formData);
+  const importFromFile = useCallback(async (file: File, opts: Parameters<typeof apiImport>[1]) => {
+    const result = await apiImport(file, opts);
     await refresh();
     return result;
   }, [refresh]);

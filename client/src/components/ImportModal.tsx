@@ -1,25 +1,32 @@
 import { useState, useRef } from 'react';
 import { previewImportHeaders, importSessions } from '../api.js';
-import type { HeaderEntry } from '../api.js';
+import type { HeaderEntry, ImportOptions } from '../api.js';
 
 interface Props {
   onImported: () => void;
   onCancel: () => void;
 }
 
-type Step = 'upload' | 'map' | 'result';
+type Step = 'upload' | 'confirm' | 'map' | 'result';
 
-interface ColumnMap {
-  dateCol: string;
-  clockInCol: string;
-  clockOutCol: string;
-  breakCol: string;
+interface ColIndices {
+  dateCol: number | null;
+  clockInCol: number | null;
+  clockOutCol: number | null;
+  breakCol: number | null;
+  lunchStartCol: number | null;
+  lunchEndCol: number | null;
 }
 
 export function ImportModal({ onImported, onCancel }: Props) {
   const [step, setStep] = useState<Step>('upload');
   const [headers, setHeaders] = useState<HeaderEntry[]>([]);
-  const [colMap, setColMap] = useState<ColumnMap>({ dateCol: '', clockInCol: '', clockOutCol: '', breakCol: '' });
+  const [cols, setCols] = useState<ColIndices>({
+    dateCol: null, clockInCol: null, clockOutCol: null,
+    breakCol: null, lunchStartCol: null, lunchEndCol: null,
+  });
+  // names used only in manual map step
+  const [colNames, setColNames] = useState({ dateCol: '', clockInCol: '', clockOutCol: '', breakCol: '' });
   const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,18 +40,27 @@ export function ImportModal({ onImported, onCancel }: Props) {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const cols = await previewImportHeaders(fd);
-      setHeaders(cols);
-      // Auto-detect common column names
-      const find = (patterns: string[]) =>
-        cols.find(h => patterns.some(p => h.name.toLowerCase().includes(p)))?.name ?? '';
-      setColMap({
-        dateCol: find(['date']),
-        clockInCol: find(['time in', 'start', 'clock in', 'clock-in']),
-        clockOutCol: find(['time out', 'end', 'clock out', 'clock-out']),
-        breakCol: find(['break', 'pause', 'comment', 'lunch']),
+      const preview = await previewImportHeaders(fd);
+      setHeaders(preview.headers);
+      setCols({
+        dateCol: preview.dateCol,
+        clockInCol: preview.clockInCol,
+        clockOutCol: preview.clockOutCol,
+        breakCol: preview.breakCol,
+        lunchStartCol: preview.lunchStartCol,
+        lunchEndCol: preview.lunchEndCol,
       });
-      setStep('map');
+      // Seed name-based map step from detected indices
+      const nameOf = (idx: number | null) =>
+        preview.headers.find(h => h.index === idx)?.name ?? '';
+      setColNames({
+        dateCol: nameOf(preview.dateCol),
+        clockInCol: nameOf(preview.clockInCol),
+        clockOutCol: nameOf(preview.clockOutCol),
+        breakCol: nameOf(preview.breakCol),
+      });
+      const allRequired = preview.dateCol !== null && preview.clockInCol !== null && preview.clockOutCol !== null;
+      setStep(allRequired ? 'confirm' : 'map');
     } catch (e) {
       setError(String(e));
     } finally {
@@ -52,8 +68,9 @@ export function ImportModal({ onImported, onCancel }: Props) {
     }
   }
 
-  async function handleImport() {
-    if (!colMap.dateCol || !colMap.clockInCol || !colMap.clockOutCol) {
+  async function handleImport(overrideCols?: ColIndices) {
+    const useCols = overrideCols ?? cols;
+    if (useCols.dateCol === null || useCols.clockInCol === null || useCols.clockOutCol === null) {
       setError('Date, Start, and End columns are required.');
       return;
     }
@@ -62,18 +79,15 @@ export function ImportModal({ onImported, onCancel }: Props) {
     setError('');
     setBusy(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      // Use the raw sheet index from the HeaderEntry — avoids indexOf misalignment on
-      // sheets where blank columns exist between data columns.
-      fd.append('dateCol',    String(headers.find(h => h.name === colMap.dateCol)?.index    ?? 0));
-      fd.append('clockInCol',  String(headers.find(h => h.name === colMap.clockInCol)?.index  ?? 1));
-      fd.append('clockOutCol', String(headers.find(h => h.name === colMap.clockOutCol)?.index ?? 2));
-      if (colMap.breakCol) {
-        const idx = headers.find(h => h.name === colMap.breakCol)?.index;
-        if (idx !== undefined) fd.append('breakCol', String(idx));
-      }
-      const res = await importSessions(fd);
+      const opts: ImportOptions = {
+        dateCol: useCols.dateCol,
+        clockInCol: useCols.clockInCol,
+        clockOutCol: useCols.clockOutCol,
+        breakCol: useCols.breakCol,
+        lunchStartCol: useCols.lunchStartCol,
+        lunchEndCol: useCols.lunchEndCol,
+      };
+      const res = await importSessions(file, opts);
       setResult(res);
       setStep('result');
     } catch (e) {
@@ -83,16 +97,26 @@ export function ImportModal({ onImported, onCancel }: Props) {
     }
   }
 
-  function ColSelect({ label, value, onChange, required }: { label: string; value: string; onChange: (v: string) => void; required?: boolean }) {
+  /** Build ColIndices from the name-based manual map state */
+  function colIndicesFromNames(): ColIndices {
+    const idx = (name: string) => headers.find(h => h.name === name)?.index ?? null;
+    return {
+      dateCol: idx(colNames.dateCol),
+      clockInCol: idx(colNames.clockInCol),
+      clockOutCol: idx(colNames.clockOutCol),
+      breakCol: colNames.breakCol ? idx(colNames.breakCol) : null,
+      lunchStartCol: cols.lunchStartCol,
+      lunchEndCol: cols.lunchEndCol,
+    };
+  }
+
+  function ColSelect({ label, value, onChange, required }: {
+    label: string; value: string; onChange: (v: string) => void; required?: boolean;
+  }) {
     return (
       <label>
         {label}{required ? ' *' : ' (optional)'}
-        <select
-          className="modal-input"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          style={{ cursor: 'pointer' }}
-        >
+        <select className="modal-input" value={value} onChange={e => onChange(e.target.value)} style={{ cursor: 'pointer' }}>
           <option value="">— select column —</option>
           {headers.map((h, i) => <option key={i} value={h.name}>{h.name}</option>)}
         </select>
@@ -100,21 +124,19 @@ export function ImportModal({ onImported, onCancel }: Props) {
     );
   }
 
+  const labelStyle: React.CSSProperties = { color: 'var(--text-muted)', display: 'inline-block', width: 52, fontSize: 12 };
+  const nameOf = (idx: number | null) => headers.find(h => h.index === idx)?.name ?? '—';
+
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal-box" style={{ minWidth: 360 }} onClick={e => e.stopPropagation()}>
+
         {step === 'upload' && (
           <>
             <h3>Import Spreadsheet</h3>
             <label>
               Select .xlsx file
-              <input
-                ref={fileRef}
-                className="modal-input"
-                type="file"
-                accept=".xlsx"
-                style={{ cursor: 'pointer' }}
-              />
+              <input ref={fileRef} className="modal-input" type="file" accept=".xlsx" style={{ cursor: 'pointer' }} />
             </label>
             {error && <span style={{ color: 'var(--red)', fontSize: 13 }}>{error}</span>}
             <div className="modal-actions">
@@ -126,20 +148,47 @@ export function ImportModal({ onImported, onCancel }: Props) {
           </>
         )}
 
+        {step === 'confirm' && (
+          <>
+            <h3>Ready to Import</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+              Auto-detected columns:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13, marginBottom: 14 }}>
+              <div><span style={labelStyle}>Date</span><strong>{nameOf(cols.dateCol)}</strong></div>
+              <div><span style={labelStyle}>Start</span><strong>{nameOf(cols.clockInCol)}</strong></div>
+              <div><span style={labelStyle}>End</span><strong>{nameOf(cols.clockOutCol)}</strong></div>
+              {cols.lunchStartCol !== null && cols.lunchEndCol !== null && (
+                <div><span style={labelStyle}>Break</span><strong>{nameOf(cols.lunchStartCol)} → {nameOf(cols.lunchEndCol)}</strong></div>
+              )}
+              {cols.lunchStartCol === null && cols.breakCol !== null && (
+                <div><span style={labelStyle}>Break</span><strong>{nameOf(cols.breakCol)}</strong></div>
+              )}
+            </div>
+            {error && <span style={{ color: 'var(--red)', fontSize: 13 }}>{error}</span>}
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setStep('map')}>Choose manually</button>
+              <button className="btn btn-green" onClick={() => handleImport()} disabled={busy}>
+                {busy ? 'Importing…' : 'Import'}
+              </button>
+            </div>
+          </>
+        )}
+
         {step === 'map' && (
           <>
             <h3>Map Columns</h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               Match your spreadsheet columns to the fields below.
             </p>
-            <ColSelect label="Date" value={colMap.dateCol} onChange={v => setColMap(p => ({ ...p, dateCol: v }))} required />
-            <ColSelect label="Start time" value={colMap.clockInCol} onChange={v => setColMap(p => ({ ...p, clockInCol: v }))} required />
-            <ColSelect label="End time" value={colMap.clockOutCol} onChange={v => setColMap(p => ({ ...p, clockOutCol: v }))} required />
-            <ColSelect label="Break / notes" value={colMap.breakCol} onChange={v => setColMap(p => ({ ...p, breakCol: v }))} />
+            <ColSelect label="Date" value={colNames.dateCol} onChange={v => setColNames(p => ({ ...p, dateCol: v }))} required />
+            <ColSelect label="Start time" value={colNames.clockInCol} onChange={v => setColNames(p => ({ ...p, clockInCol: v }))} required />
+            <ColSelect label="End time" value={colNames.clockOutCol} onChange={v => setColNames(p => ({ ...p, clockOutCol: v }))} required />
+            <ColSelect label="Break / notes" value={colNames.breakCol} onChange={v => setColNames(p => ({ ...p, breakCol: v }))} />
             {error && <span style={{ color: 'var(--red)', fontSize: 13 }}>{error}</span>}
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setStep('upload')}>← Back</button>
-              <button className="btn btn-green" onClick={handleImport} disabled={busy}>
+              <button className="btn btn-green" onClick={() => handleImport(colIndicesFromNames())} disabled={busy}>
                 {busy ? 'Importing…' : 'Import'}
               </button>
             </div>
@@ -164,6 +213,7 @@ export function ImportModal({ onImported, onCancel }: Props) {
             </div>
           </>
         )}
+
       </div>
     </div>
   );

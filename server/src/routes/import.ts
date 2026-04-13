@@ -11,7 +11,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
   fileFilter: (_req, file, cb) => {
-    // Always require .xlsx extension — MIME type can vary (octet-stream, zip) across browsers.
     const hasXlsxExt = file.originalname.toLowerCase().endsWith('.xlsx');
     const hasValidMime =
       file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
@@ -26,9 +25,28 @@ type CellValue = string | number | boolean | Date | null | undefined;
 /** Sent to the client in preview mode so the UI can show column names with raw sheet indices. */
 export interface HeaderEntry { name: string; index: number; }
 
+/** Returned by preview — headers plus auto-detected column index suggestions (-1 = not found). */
+export interface PreviewResult {
+  headers: HeaderEntry[];
+  dateCol: number | null;
+  clockInCol: number | null;
+  clockOutCol: number | null;
+  breakCol: number | null;
+  lunchStartCol: number | null;
+  lunchEndCol: number | null;
+}
+
 /** Validates and returns a non-negative integer column index, or throws on bad input. */
 function parseColIdx(raw: unknown, fallback: number): number {
   const n = parseInt(String(raw ?? fallback), 10);
+  if (isNaN(n) || n < 0) throw new Error(`Invalid column index: ${JSON.stringify(raw)}`);
+  return n;
+}
+
+/** Parse optional column index — returns null when absent or empty, throws on invalid. */
+function parseOptColIdx(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = parseInt(String(raw), 10);
   if (isNaN(n) || n < 0) throw new Error(`Invalid column index: ${JSON.stringify(raw)}`);
   return n;
 }
@@ -38,7 +56,7 @@ function isValidDateStr(s: string): boolean {
   const parts = s.split('-').map(Number);
   if (parts.length !== 3) return false;
   const [y, m, d] = parts;
-  const date = new Date(`${s}T12:00:00`); // noon local avoids DST edge cases
+  const date = new Date(`${s}T12:00:00`);
   return (
     !isNaN(date.getTime()) &&
     date.getFullYear() === y &&
@@ -51,7 +69,6 @@ function isValidDateStr(s: string): boolean {
 function parseDate(value: CellValue): string | null {
   if (value == null || value === '') return null;
   if (value instanceof Date) {
-    // Use local date components — SheetJS Date objects represent calendar dates in local TZ.
     const y = value.getFullYear();
     const m = String(value.getMonth() + 1).padStart(2, '0');
     const d = String(value.getDate()).padStart(2, '0');
@@ -61,12 +78,10 @@ function parseDate(value: CellValue): string | null {
   const str = String(value).trim();
   if (!str) return null;
 
-  // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
     return isValidDateStr(str) ? str : null;
   }
 
-  // MM/DD/YYYY or M/D/YYYY
   const mdyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (mdyMatch) {
     const [, mo, d, y] = mdyMatch;
@@ -74,9 +89,6 @@ function parseDate(value: CellValue): string | null {
     return isValidDateStr(result) ? result : null;
   }
 
-  // Fallback for English date strings ("Apr 10, 2026" etc.).
-  // new Date(str) treats the input as UTC midnight — use .toISOString().slice(0,10) to read
-  // the UTC date, which matches the intended calendar date for these named-month formats.
   const parsed = new Date(str);
   if (!isNaN(parsed.getTime())) {
     const iso = parsed.toISOString().slice(0, 10);
@@ -91,20 +103,14 @@ function parseTime(value: CellValue, dateStr: string): string | null {
   if (value == null || value === '') return null;
 
   if (value instanceof Date) {
-    // SheetJS creates time-only cells using the local-time Date constructor, so the
-    // time fraction (e.g. 0.34375 = 8:15 AM) is stored in local clock hours.
-    // Use getHours/getMinutes (local), not getUTCHours, to read the correct value.
     const h = value.getHours();
     const m = value.getMinutes();
     const s = value.getSeconds();
-    // Building from a local-time template is intentional: in Electron the server
-    // runs in the same process as the OS, so local TZ === user's TZ.
     return new Date(
       `${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
     ).toISOString();
   }
 
-  // Numeric time fraction (e.g. 0.34375 = 8:15 AM) — fallback if cellDates didn't convert.
   if (typeof value === 'number' && value >= 0 && value < 1) {
     const totalMins = Math.round(value * 24 * 60);
     const h = Math.floor(totalMins / 60);
@@ -115,13 +121,11 @@ function parseTime(value: CellValue, dateStr: string): string | null {
   const str = String(value).trim();
   if (!str) return null;
 
-  // HH:MM, H:MM, HH:MM:SS, with optional AM/PM
   const match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
   if (match) {
     let hours = parseInt(match[1], 10);
     const mins = parseInt(match[2], 10);
     const secs = match[3] ? parseInt(match[3], 10) : 0;
-    // Reject out-of-range values — would produce an invalid Date and throw RangeError
     if (mins > 59 || secs > 59 || hours > 23) return null;
     const ampm = match[4]?.toLowerCase();
     if (ampm === 'pm' && hours < 12) hours += 12;
@@ -132,6 +136,41 @@ function parseTime(value: CellValue, dateStr: string): string | null {
     ).toISOString();
   }
 
+  return null;
+}
+
+/**
+ * Find the header row by looking for the first row that contains at least one
+ * time-tracking keyword. This handles spreadsheets with decorative title rows
+ * or summary tables above the actual data (e.g. AFL timesheets).
+ */
+function findHeaderRow(rows: CellValue[][]): CellValue[] {
+  const timeKeywords = ['date', 'day', 'time', 'start', 'end', 'clock', 'break', 'lunch', 'in', 'out'];
+  for (const row of rows) {
+    const cells = row.map(v => String(v ?? '').trim().toLowerCase()).filter(v => v !== '');
+    if (cells.length >= 2 && cells.some(v => timeKeywords.some(kw => v === kw || v.startsWith(kw + ' ') || v.endsWith(' ' + kw) || v.includes(' ' + kw + ' ')))) {
+      return row;
+    }
+  }
+  // Fallback: first row with ≥2 non-empty cells
+  for (const row of rows) {
+    if (row.filter(v => v != null && String(v).trim() !== '').length >= 2) return row;
+  }
+  return [];
+}
+
+/** Categorise a single header name into a semantic field, most-specific patterns first. */
+function categoriseHeader(name: string): 'date' | 'clockIn' | 'clockOut' | 'lunchStart' | 'lunchEnd' | 'break' | null {
+  const n = name.toLowerCase();
+  // Lunch sub-columns must be matched before generic 'start'/'end'/'break' patterns
+  if (n.includes('lunch start') || n.includes('break start') || n.includes('lunch out')) return 'lunchStart';
+  if (n.includes('lunch end') || n.includes('break end') || n.includes('lunch in') || n.includes('lunch return')) return 'lunchEnd';
+  if (n.includes('date') || n === 'day') return 'date';
+  if (n.includes('time in') || n.includes('time-in') || n.includes('clock in') || n.includes('clock-in')) return 'clockIn';
+  if (n.includes('time out') || n.includes('time-out') || n.includes('clock out') || n.includes('clock-out')) return 'clockOut';
+  if (n === 'start' || n.includes('arrival') || (n.includes('start') && !n.includes('lunch'))) return 'clockIn';
+  if (n === 'end' || n.includes('finish') || n.includes('departure') || (n.includes('end') && !n.includes('lunch'))) return 'clockOut';
+  if (n.includes('break') || n.includes('lunch') || n.includes('unpaid') || n.includes('pause') || n.includes('comment') || n.includes('note')) return 'break';
   return null;
 }
 
@@ -154,53 +193,56 @@ router.post('/', upload.single('file'), (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Spreadsheet has no worksheets.' });
   }
 
-  // Read the first sheet to find the header row
   const firstWs = workbook.Sheets[workbook.SheetNames[0]];
   const firstRows = XLSX.utils.sheet_to_json<CellValue[]>(firstWs, {
     header: 1, raw: true, defval: null,
-  });
+  }) as CellValue[][];
 
-  // Find the first row with ≥3 non-empty cells — handles spreadsheets with decorative title rows
-  let headerRowData: CellValue[] = [];
-  for (const row of firstRows as CellValue[][]) {
-    if (row.filter(v => v != null && String(v).trim() !== '').length >= 3) {
-      headerRowData = row;
-      break;
-    }
-  }
+  const headerRowData = findHeaderRow(firstRows);
 
-  // Return {name, index} pairs so the client maps column names to their raw sheet column indices
-  // without relying on indexOf on a filtered array (which would be off when blank columns exist).
   const headers: HeaderEntry[] = headerRowData
     .map((v, i) => ({ name: String(v ?? '').trim(), index: i }))
     .filter(h => h.name !== '');
 
-  if (isPreview) return res.json(headers);
+  if (isPreview) {
+    // Auto-detect columns from header names
+    const suggestions: Record<string, number | null> = {
+      dateCol: null, clockInCol: null, clockOutCol: null,
+      breakCol: null, lunchStartCol: null, lunchEndCol: null,
+    };
+    for (const h of headers) {
+      const cat = categoriseHeader(h.name);
+      if (cat === 'date'       && suggestions.dateCol       === null) suggestions.dateCol       = h.index;
+      if (cat === 'clockIn'    && suggestions.clockInCol    === null) suggestions.clockInCol    = h.index;
+      if (cat === 'clockOut'   && suggestions.clockOutCol   === null) suggestions.clockOutCol   = h.index;
+      if (cat === 'break'      && suggestions.breakCol      === null) suggestions.breakCol      = h.index;
+      if (cat === 'lunchStart' && suggestions.lunchStartCol === null) suggestions.lunchStartCol = h.index;
+      if (cat === 'lunchEnd'   && suggestions.lunchEndCol   === null) suggestions.lunchEndCol   = h.index;
+    }
+    const result: PreviewResult = { headers, ...suggestions } as PreviewResult;
+    return res.json(result);
+  }
 
-  // Validate column indices — reject NaN / negative values with a clear error
-  let dateColIdx: number, clockInColIdx: number, clockOutColIdx: number, breakColIdx: number | null;
+  // ── Full import ────────────────────────────────────────────────────────────
+  let dateColIdx: number, clockInColIdx: number, clockOutColIdx: number;
+  let breakColIdx: number | null, lunchStartColIdx: number | null, lunchEndColIdx: number | null;
   try {
     dateColIdx     = parseColIdx(req.body.dateCol,    0);
     clockInColIdx  = parseColIdx(req.body.clockInCol,  1);
     clockOutColIdx = parseColIdx(req.body.clockOutCol, 2);
-    breakColIdx    = req.body.breakCol !== undefined && req.body.breakCol !== ''
-      ? parseColIdx(req.body.breakCol, -1)
-      : null;
+    breakColIdx      = parseOptColIdx(req.body.breakCol);
+    lunchStartColIdx = parseOptColIdx(req.body.lunchStartCol);
+    lunchEndColIdx   = parseOptColIdx(req.body.lunchEndCol);
   } catch (e: unknown) {
     return res.status(400).json({ error: (e as Error).message });
   }
 
   const db = getDb();
-
   const insertStmt = db.prepare(
     'INSERT INTO sessions (date, clock_in, clock_out, duration_secs, pauses) VALUES (?, ?, ?, ?, ?)'
   );
-  // Note: existsStmt sees in-progress writes within this transaction (same SQLite connection,
-  // read-your-own-writes semantics) — so intra-file deduplication works correctly.
   const existsStmt = db.prepare('SELECT id FROM sessions WHERE clock_in = ?');
 
-  // Wrap all inserts in a single transaction — partial imports won't be committed on error.
-  // Counters live inside the closure so they can't become stale on a rollback.
   const runImport = db.transaction(() => {
     let imported = 0;
     let skipped = 0;
@@ -212,7 +254,7 @@ router.post('/', upload.single('file'), (req: Request, res: Response) => {
       });
 
       rows.forEach((row, rowIndex) => {
-        if (rowIndex === 0) return; // skip first row (header / decorative)
+        if (rowIndex === 0) return; // skip header / title row
 
         const dateCell = (row as CellValue[])[dateColIdx];
         const rawDate = String(dateCell ?? '').trim().toUpperCase();
@@ -232,10 +274,17 @@ router.post('/', upload.single('file'), (req: Request, res: Response) => {
         }
 
         const pauses: Pause[] = [];
-        if (breakColIdx !== null) {
+
+        // Prefer explicit lunch start/end columns (accurate break deduction)
+        if (lunchStartColIdx !== null && lunchEndColIdx !== null) {
+          const lunchStartISO = parseTime((row as CellValue[])[lunchStartColIdx], dateStr);
+          const lunchEndISO   = parseTime((row as CellValue[])[lunchEndColIdx],   dateStr);
+          if (lunchStartISO && lunchEndISO) {
+            pauses.push({ start: lunchStartISO, end: lunchEndISO, comment: 'Lunch' });
+          }
+        } else if (breakColIdx !== null) {
           const breakText = String((row as CellValue[])[breakColIdx] ?? '').trim();
           if (breakText) {
-            // Zero-duration pause stores the comment without affecting duration calculation
             pauses.push({ start: clockInISO, end: clockInISO, comment: breakText });
           }
         }

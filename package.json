@@ -38,7 +38,7 @@
     "appId": "com.afl.timepunch",
     "productName": "AFL Time Punch",
     "directories": {
-      "output": "release"
+      "output": "dist-release"
     },
     "asar": true,
     "asarUnpack": ["**/node_modules/better-sqlite3/**/*", "**/*.node"],

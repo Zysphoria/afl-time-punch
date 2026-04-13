@@ -7,6 +7,8 @@ import {
   resumeSession as apiResume,
   editSessionTimes as apiEdit,
   deleteSession as apiDelete,
+  createManualSession as apiCreateManual,
+  importSessions as apiImport,
 } from '../api.js';
 import type { Session } from '../types.js';
 
@@ -14,6 +16,8 @@ export function useSessions() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  function clearError() { setError(null); }
 
   const refresh = useCallback(async () => {
     try {
@@ -32,45 +36,93 @@ export function useSessions() {
   const activeSession = sessions.find(s => s.clock_out === null) ?? null;
 
   const clockIn = useCallback(async () => {
-    const created = await apiClockIn();
-    setSessions(prev => [...prev, created]);
-    return created;
+    try {
+      const created = await apiClockIn();
+      setSessions(prev => [...prev, created]);
+      return created;
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
   }, []);
 
   const clockOut = useCallback(async (id: number) => {
-    const updated = await apiClockOut(id);
-    setSessions(prev => prev.map(s => (s.id === id ? updated : s)));
-    return updated;
+    try {
+      const updated = await apiClockOut(id);
+      setSessions(prev => prev.map(s => (s.id === id ? updated : s)));
+      return updated;
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
   }, []);
 
   const pause = useCallback(async (id: number) => {
-    const updated = await apiPause(id);
-    setSessions(prev => prev.map(s => (s.id === id ? updated : s)));
-    return updated;
+    try {
+      const updated = await apiPause(id);
+      setSessions(prev => prev.map(s => (s.id === id ? updated : s)));
+      return updated;
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
   }, []);
 
   const resume = useCallback(async (id: number, comment?: string) => {
-    const updated = await apiResume(id, comment);
-    setSessions(prev => prev.map(s => (s.id === id ? updated : s)));
-    return updated;
+    try {
+      const updated = await apiResume(id, comment);
+      setSessions(prev => prev.map(s => (s.id === id ? updated : s)));
+      return updated;
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
   }, []);
 
   const editTimes = useCallback(async (id: number, clockInISO: string, clockOutISO?: string) => {
-    const updated = await apiEdit(id, clockInISO, clockOutISO);
-    setSessions(prev => prev.map(s => (s.id === id ? updated : s)));
-    return updated;
+    try {
+      const updated = await apiEdit(id, clockInISO, clockOutISO);
+      setSessions(prev => prev.map(s => (s.id === id ? updated : s)));
+      return updated;
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
   }, []);
 
   const removeSession = useCallback(async (id: number) => {
-    await apiDelete(id);
-    setSessions(prev => prev.filter(s => s.id !== id));
+    try {
+      await apiDelete(id);
+      setSessions(prev => prev.filter(s => s.id !== id));
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
   }, []);
+
+  const addManualEntry = useCallback(async (clockInISO: string, clockOutISO: string) => {
+    try {
+      const created = await apiCreateManual(clockInISO, clockOutISO);
+      setSessions(prev => [...prev, created].sort((a, b) => a.clock_in.localeCompare(b.clock_in)));
+      return created;
+    } catch (e) {
+      setError(String(e));
+      throw e;
+    }
+  }, []);
+
+  const importFromFile = useCallback(async (formData: FormData) => {
+    const result = await apiImport(formData);
+    await refresh();
+    return result;
+  }, [refresh]);
 
   return {
     sessions,
     activeSession,
     loading,
     error,
+    clearError,
     refresh,
     clockIn,
     clockOut,
@@ -78,5 +130,7 @@ export function useSessions() {
     resume,
     editTimes,
     deleteSession: removeSession,
+    addManualEntry,
+    importFromFile,
   };
 }

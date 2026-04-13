@@ -1,5 +1,10 @@
 import type { Pause, Session } from '../types.js';
 
+/** Format a Date as YYYY-MM-DD using local calendar (not UTC). */
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 /** Format a number of seconds as HH:MM:SS */
 export function formatDuration(secs: number): string {
   const h = Math.floor(secs / 3600);
@@ -9,43 +14,47 @@ export function formatDuration(secs: number): string {
 }
 
 /**
- * Return the Monday date string (YYYY-MM-DD) for the week containing dateStr.
- * Handles Sunday (day=0) as the previous Monday.
+ * Return the Saturday date string (YYYY-MM-DD) for the week containing dateStr.
+ * Weeks run Saturday–Friday.
  */
-export function getWeekMonday(dateStr: string): string {
+export function getWeekStart(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
+  const day = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const diff = day === 6 ? 0 : -(day + 1);
   d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
-/** YYYY-MM-DD → Monday-based week key */
+/** YYYY-MM-DD → Saturday-based week key */
 export function getWeekKey(dateStr: string): string {
-  return getWeekMonday(dateStr);
+  return getWeekStart(dateStr);
 }
 
-/** "Apr 1–7 2026" label for a given Monday date string */
-export function getWeekLabel(monday: string): string {
-  const start = new Date(monday + 'T00:00:00');
-  const end = new Date(monday + 'T00:00:00');
+/** "Sat 4 – Fri 10 Apr 2026" label for a given Saturday date string */
+export function getWeekLabel(saturday: string): string {
+  const start = new Date(saturday + 'T00:00:00');
+  const end = new Date(saturday + 'T00:00:00');
   end.setDate(end.getDate() + 6);
-  const monthName = start.toLocaleString('en-US', { month: 'short' });
-  return `${monthName} ${start.getDate()}–${end.getDate()} ${start.getFullYear()}`;
+  const startMonth = start.toLocaleString('en-US', { month: 'short' });
+  const endMonth = end.toLocaleString('en-US', { month: 'short' });
+  if (startMonth === endMonth) {
+    return `${startMonth} ${start.getDate()}–${end.getDate()} ${start.getFullYear()}`;
+  }
+  return `${startMonth} ${start.getDate()} – ${endMonth} ${end.getDate()} ${end.getFullYear()}`;
 }
 
-/** Returns array of 7 YYYY-MM-DD strings from Monday to Sunday */
-export function getWeekDays(monday: string): string[] {
+/** Returns array of 7 YYYY-MM-DD strings from Saturday to Friday */
+export function getWeekDays(saturday: string): string[] {
   const days: string[] = [];
-  const d = new Date(monday + 'T00:00:00');
+  const d = new Date(saturday + 'T00:00:00');
   for (let i = 0; i < 7; i++) {
-    days.push(d.toISOString().slice(0, 10));
+    days.push(localDateStr(d));
     d.setDate(d.getDate() + 1);
   }
   return days;
 }
 
-/** Group an array of sessions by their week Monday key */
+/** Group an array of sessions by their Saturday week-start key */
 export function groupByWeek(sessions: Session[]): Map<string, Session[]> {
   const map = new Map<string, Session[]>();
   for (const s of sessions) {
@@ -99,7 +108,7 @@ export function formatDayLabel(dateStr: string): string {
   });
 }
 
-/** Today's date as YYYY-MM-DD */
+/** Today's date as YYYY-MM-DD (local calendar, not UTC) */
 export function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr(new Date());
 }

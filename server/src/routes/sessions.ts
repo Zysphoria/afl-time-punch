@@ -13,8 +13,8 @@ function parseSession(row: SessionRow) {
   };
 }
 
-function weekSunday(monday: string): string {
-  const d = new Date(monday + 'T00:00:00');
+function weekEnd(saturday: string): string {
+  const d = new Date(saturday + 'T00:00:00');
   d.setDate(d.getDate() + 6);
   return d.toISOString().slice(0, 10);
 }
@@ -24,10 +24,10 @@ router.get('/', (req: Request, res: Response) => {
   const week = req.query.week as string | undefined;
 
   if (week) {
-    const sunday = weekSunday(week);
+    const friday = weekEnd(week);
     const rows = db
       .prepare('SELECT * FROM sessions WHERE date >= ? AND date <= ? ORDER BY clock_in ASC')
-      .all(week, sunday) as SessionRow[];
+      .all(week, friday) as SessionRow[];
     return res.json(rows.map(parseSession));
   }
 
@@ -39,22 +39,46 @@ router.get('/', (req: Request, res: Response) => {
 
 router.post('/', (req: Request, res: Response) => {
   const db = getDb();
+  const body = req.body as { clock_in?: string; clock_out?: string } | undefined;
+  const isManual = !!(body?.clock_in);
 
-  const active = db
-    .prepare('SELECT id FROM sessions WHERE clock_out IS NULL')
-    .get();
-  if (active) {
-    return res.status(409).json({ error: 'An active session already exists.' });
+  // Punch mode: block if a session is already open
+  // Manual mode with no clock_out: also block — would create a second open session
+  const needsActiveCheck = !isManual || (isManual && !body?.clock_out);
+  if (needsActiveCheck) {
+    const active = db
+      .prepare('SELECT id FROM sessions WHERE clock_out IS NULL')
+      .get();
+    if (active) {
+      return res.status(409).json({ error: 'An active session already exists.' });
+    }
   }
 
-  const now = new Date().toISOString();
-  const date = now.slice(0, 10);
+  const clockIn = isManual ? body!.clock_in! : new Date().toISOString();
+  const clockOut = isManual ? (body!.clock_out ?? null) : null;
+
+  if (isManual) {
+    if (isNaN(Date.parse(clockIn))) {
+      return res.status(400).json({ error: 'Invalid clock_in timestamp.' });
+    }
+    if (clockOut !== null) {
+      if (isNaN(Date.parse(clockOut))) {
+        return res.status(400).json({ error: 'Invalid clock_out timestamp.' });
+      }
+      if (clockOut <= clockIn) {
+        return res.status(400).json({ error: 'clock_out must be after clock_in.' });
+      }
+    }
+  }
+
+  const date = clockIn.slice(0, 10);
+  const durationSecs = clockOut ? computeDurationSecs(clockIn, clockOut, []) : 0;
 
   const result = db
     .prepare(
-      'INSERT INTO sessions (date, clock_in, clock_out, duration_secs, pauses) VALUES (?, ?, NULL, 0, ?)'
+      'INSERT INTO sessions (date, clock_in, clock_out, duration_secs, pauses) VALUES (?, ?, ?, ?, ?)'
     )
-    .run(date, now, '[]');
+    .run(date, clockIn, clockOut, durationSecs, '[]');
 
   const row = db
     .prepare('SELECT * FROM sessions WHERE id = ?')

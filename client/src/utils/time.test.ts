@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatDuration,
-  getWeekMonday,
+  getWeekStart,
   getWeekLabel,
   getWeekDays,
   computeElapsedSecs,
@@ -13,30 +13,36 @@ describe('formatDuration', () => {
   it('formats 3600 as 01:00:00', () => expect(formatDuration(3600)).toBe('01:00:00'));
 });
 
-describe('getWeekMonday', () => {
-  it('returns the same day for a Monday', () => {
-    expect(getWeekMonday('2026-03-30')).toBe('2026-03-30'); // Monday
+describe('getWeekStart', () => {
+  it('returns the same day for a Saturday', () => {
+    expect(getWeekStart('2026-04-04')).toBe('2026-04-04'); // Saturday
   });
-  it('returns the previous Monday for a Wednesday', () => {
-    expect(getWeekMonday('2026-04-01')).toBe('2026-03-30');
+  it('returns the previous Saturday for a Wednesday', () => {
+    expect(getWeekStart('2026-04-08')).toBe('2026-04-04');
   });
-  it('returns the previous Monday for a Sunday', () => {
-    expect(getWeekMonday('2026-04-05')).toBe('2026-03-30');
+  it('returns the previous Saturday for a Sunday', () => {
+    expect(getWeekStart('2026-04-05')).toBe('2026-04-04');
+  });
+  it('returns the previous Saturday for a Friday', () => {
+    expect(getWeekStart('2026-04-10')).toBe('2026-04-04');
   });
 });
 
 describe('getWeekLabel', () => {
   it('produces a correct label for a known week', () => {
-    expect(getWeekLabel('2026-03-30')).toBe('Mar 30–5 2026');
+    expect(getWeekLabel('2026-04-04')).toBe('Apr 4–10 2026');
+  });
+  it('spans months correctly', () => {
+    expect(getWeekLabel('2026-03-28')).toBe('Mar 28 – Apr 3 2026');
   });
 });
 
 describe('getWeekDays', () => {
-  it('returns 7 days starting from Monday', () => {
-    const days = getWeekDays('2026-03-30');
+  it('returns 7 days starting from Saturday', () => {
+    const days = getWeekDays('2026-04-04');
     expect(days).toHaveLength(7);
-    expect(days[0]).toBe('2026-03-30');
-    expect(days[6]).toBe('2026-04-05');
+    expect(days[0]).toBe('2026-04-04'); // Saturday
+    expect(days[6]).toBe('2026-04-10'); // Friday
   });
 });
 

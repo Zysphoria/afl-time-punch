@@ -4,7 +4,7 @@ import {
   groupByWeek,
   getWeekLabel,
   getWeekDays,
-  getWeekMonday,
+  getWeekStart,
   todayStr,
 } from '../utils/time.js';
 
@@ -16,7 +16,7 @@ interface Props {
 
 export function Sidebar({ sessions, selectedDay, onSelectDay }: Props) {
   const today = todayStr();
-  const currentWeekMonday = getWeekMonday(today);
+  const currentWeekStart = getWeekStart(today);
 
   // Weeks that have sessions, sorted descending
   const weekMap = useMemo(() => groupByWeek(sessions), [sessions]);
@@ -27,37 +27,37 @@ export function Sidebar({ sessions, selectedDay, onSelectDay }: Props) {
 
   // Current week always expanded; past weeks collapsed by default
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(
-    new Set([currentWeekMonday])
+    new Set([currentWeekStart])
   );
 
-  function toggleWeek(monday: string) {
+  function toggleWeek(weekStart: string) {
     setExpandedWeeks(prev => {
       const next = new Set(prev);
-      if (next.has(monday)) next.delete(monday);
-      else next.add(monday);
+      if (next.has(weekStart)) next.delete(weekStart);
+      else next.add(weekStart);
       return next;
     });
   }
 
   // Separate current week from past weeks
-  const pastWeeks = sortedWeeks.filter(w => w !== currentWeekMonday);
+  const pastWeeks = sortedWeeks.filter(w => w !== currentWeekStart);
 
-  function renderWeek(monday: string, isCurrent: boolean) {
-    const weekSessions = weekMap.get(monday) ?? [];
-    const isExpanded = expandedWeeks.has(monday);
+  function renderWeek(weekStart: string, isCurrent: boolean) {
+    const weekSessions = weekMap.get(weekStart) ?? [];
+    const isExpanded = expandedWeeks.has(weekStart);
     const totalSecs = weekSessions
       .filter(s => s.clock_out !== null)
       .reduce((sum, s) => sum + s.duration_secs, 0);
     const totalHrs = (totalSecs / 3600).toFixed(1);
-    const days = getWeekDays(monday);
+    const days = getWeekDays(weekStart);
 
     return (
-      <div key={monday}>
+      <div key={weekStart}>
         <div
           className={`sidebar-week-header ${isCurrent ? 'current' : ''}`}
-          onClick={() => toggleWeek(monday)}
+          onClick={() => toggleWeek(weekStart)}
         >
-          <span>{isExpanded ? '▼' : '▶'} {getWeekLabel(monday)}</span>
+          <span>{isExpanded ? '▼' : '▶'} {getWeekLabel(weekStart)}</span>
           <span style={{ fontSize: 12 }}>{totalHrs}h</span>
         </div>
         {isExpanded && days.map(day => {
@@ -90,7 +90,7 @@ export function Sidebar({ sessions, selectedDay, onSelectDay }: Props) {
   return (
     <div className="sidebar">
       <div className="sidebar-section-label">Current Week</div>
-      {renderWeek(currentWeekMonday, true)}
+      {renderWeek(currentWeekStart, true)}
 
       {pastWeeks.length > 0 && (
         <>

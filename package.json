@@ -1,7 +1,11 @@
 {
   "name": "afl-time-punch",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zysphoria/afl-time-punch"
+  },
   "main": "dist-electron/main.js",
   "workspaces": [
     "client",
@@ -12,12 +16,15 @@
     "electron:dev": "tsc -p electron/tsconfig.json && wait-on http://localhost:5173 http://localhost:3001/api/health && cross-env NODE_ENV=development electron .",
     "build": "npm run build --workspace=client && npm run build --workspace=server && tsc -p electron/tsconfig.json",
     "dist:win": "npm run build && electron-builder --win",
+    "release:win": "npm run build && electron-builder --win --publish always",
     "postinstall": "node -e \"require('fs').mkdirSync('data', { recursive: true })\" && electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",
+    "electron-updater": "^6.8.3",
     "exceljs": "^4.4.0",
-    "express": "^4.18.3"
+    "express": "^4.18.3",
+    "multer": "^2.1.1"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",
@@ -31,9 +38,10 @@
     "appId": "com.afl.timepunch",
     "productName": "AFL Time Punch",
     "directories": {
-      "output": "C:\\Users\\hunte\\Desktop\\afl-release"
+      "output": "release"
     },
-    "asar": false,
+    "asar": true,
+    "asarUnpack": ["**/node_modules/better-sqlite3/**/*", "**/*.node"],
     "files": [
       "dist-electron/**/*",
       "server/package.json",
@@ -43,11 +51,19 @@
       "server/node_modules/**/*"
     ],
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Zysphoria",
+      "repo": "afl-time-punch",
+      "releaseType": "release"
     }
   }
 }

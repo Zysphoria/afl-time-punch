@@ -23,6 +23,25 @@ export async function clockIn(): Promise<Session> {
   return handleResponse<Session>(res);
 }
 
+export async function createManualSession(clockInISO: string, clockOutISO: string): Promise<Session> {
+  const res = await fetch(`${BASE}/sessions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clock_in: clockInISO, clock_out: clockOutISO }),
+  });
+  return handleResponse<Session>(res);
+}
+
+export async function importSessions(formData: FormData): Promise<{ imported: number; skipped: number }> {
+  const res = await fetch(`${BASE}/import`, { method: 'POST', body: formData });
+  return handleResponse<{ imported: number; skipped: number }>(res);
+}
+
+export async function previewImportHeaders(formData: FormData): Promise<string[]> {
+  const res = await fetch(`${BASE}/import?preview=true`, { method: 'POST', body: formData });
+  return handleResponse<string[]>(res);
+}
+
 export async function clockOut(id: number): Promise<Session> {
   const res = await fetch(`${BASE}/sessions/${id}`, {
     method: 'PATCH',

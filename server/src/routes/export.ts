@@ -16,23 +16,23 @@ interface ParsedSession {
   created_at: string;
 }
 
-function weekSunday(monday: string): string {
-  const d = new Date(monday + 'T00:00:00');
+function weekFriday(saturday: string): string {
+  const d = new Date(saturday + 'T00:00:00');
   d.setDate(d.getDate() + 6);
   return d.toISOString().slice(0, 10);
 }
 
-function weekMonday(dateStr: string): string {
+function weekSaturday(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
+  const diff = day === 6 ? 0 : -(day + 1);
   d.setDate(d.getDate() + diff);
   return d.toISOString().slice(0, 10);
 }
 
-function weekLabel(monday: string): string {
-  const start = new Date(monday + 'T00:00:00');
-  const end = new Date(monday + 'T00:00:00');
+function weekLabel(saturday: string): string {
+  const start = new Date(saturday + 'T00:00:00');
+  const end = new Date(saturday + 'T00:00:00');
   end.setDate(end.getDate() + 6);
   const startMonth = start.toLocaleString('en-US', { month: 'short' });
   const endMonth = end.toLocaleString('en-US', { month: 'short' });
@@ -71,10 +71,10 @@ router.get('/', async (req: Request, res: Response) => {
 
   let rows: SessionRow[];
   if (weekParam) {
-    const sunday = weekSunday(weekParam);
+    const friday = weekFriday(weekParam);
     rows = db
       .prepare('SELECT * FROM sessions WHERE date >= ? AND date <= ? ORDER BY clock_in ASC')
-      .all(weekParam, sunday) as SessionRow[];
+      .all(weekParam, friday) as SessionRow[];
   } else {
     rows = db.prepare('SELECT * FROM sessions ORDER BY clock_in ASC').all() as SessionRow[];
   }
@@ -86,9 +86,9 @@ router.get('/', async (req: Request, res: Response) => {
 
   const weekMap = new Map<string, ParsedSession[]>();
   for (const s of sessions) {
-    const monday = weekMonday(s.date);
-    if (!weekMap.has(monday)) weekMap.set(monday, []);
-    weekMap.get(monday)!.push(s);
+    const saturday = weekSaturday(s.date);
+    if (!weekMap.has(saturday)) weekMap.set(saturday, []);
+    weekMap.get(saturday)!.push(s);
   }
 
   const workbook = new ExcelJS.Workbook();
@@ -97,9 +97,9 @@ router.get('/', async (req: Request, res: Response) => {
 
   const sortedWeeks = [...weekMap.keys()].sort();
 
-  for (const monday of sortedWeeks) {
-    const weekSessions = weekMap.get(monday)!;
-    const sheetName = weekLabel(monday).replace(/[:\\\/\?\*\[\]]/g, '-');
+  for (const saturday of sortedWeeks) {
+    const weekSessions = weekMap.get(saturday)!;
+    const sheetName = weekLabel(saturday).replace(/[:\\\/\?\*\[\]]/g, '-');
     const sheet = workbook.addWorksheet(sheetName);
 
     sheet.columns = [
@@ -170,7 +170,6 @@ router.get('/', async (req: Request, res: Response) => {
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   try {
     await workbook.xlsx.write(res);
-    res.end();
   } catch (err) {
     if (!res.headersSent) {
       res.status(500).json({ error: 'Export failed.' });

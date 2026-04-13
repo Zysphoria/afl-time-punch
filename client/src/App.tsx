@@ -18,6 +18,8 @@ export default function App() {
     resume,
     editTimes,
     deleteSession,
+    addManualEntry,
+    refresh,
   } = useSessions();
 
   const { settings, saveRate } = useSettings();
@@ -67,6 +69,8 @@ export default function App() {
         onPause={handlePause}
         onResume={handleResumeClick}
         onRateChange={saveRate}
+        onAddManualEntry={addManualEntry}
+        onImported={refresh}
       />
 
       <Sidebar

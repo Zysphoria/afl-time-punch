@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Session } from '../types.js';
 import { formatDuration, todayStr, getWeekKey } from '../utils/time.js';
 import { computePay, formatPay } from '../utils/pay.js';
 import { exportUrl } from '../api.js';
+import { ManualEntryModal } from './ManualEntryModal.js';
+import { ImportModal } from './ImportModal.js';
 
 interface Props {
   activeSession: Session | null;
@@ -14,6 +16,8 @@ interface Props {
   onPause: () => void;
   onResume: () => void;
   onRateChange: (rate: string) => void;
+  onAddManualEntry: (clockIn: string, clockOut: string) => void;
+  onImported: () => void;
 }
 
 export function TopBar({
@@ -26,14 +30,20 @@ export function TopBar({
   onPause,
   onResume,
   onRateChange,
+  onAddManualEntry,
+  onImported,
 }: Props) {
   const [rateInput, setRateInput] = useState(hourlyRate);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const isPaused = activeSession?.pauses.some(p => !p.end) ?? false;
 
-  // Sync external rate changes into local input
-  if (rateInput !== hourlyRate && document.activeElement?.className !== 'rate-input') {
-    setRateInput(hourlyRate);
-  }
+  // Sync external rate changes into local input only when the field isn't focused
+  useEffect(() => {
+    if (document.activeElement?.className !== 'rate-input') {
+      setRateInput(hourlyRate);
+    }
+  }, [hourlyRate]);
 
   // Today's pay
   const today = todayStr();
@@ -115,8 +125,32 @@ export function TopBar({
         />
       </div>
 
+      {/* Manual entry + import */}
+      <button className="btn btn-ghost" onClick={() => setShowManualEntry(true)}>+ Add Entry</button>
+      <button className="btn btn-ghost" onClick={() => setShowImport(true)}>Import</button>
+
       {/* Export */}
       <button className="btn btn-ghost" onClick={handleExport}>Export XLSX</button>
+
+      {showManualEntry && (
+        <ManualEntryModal
+          onConfirm={(clockIn, clockOut) => {
+            onAddManualEntry(clockIn, clockOut);
+            setShowManualEntry(false);
+          }}
+          onCancel={() => setShowManualEntry(false)}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          onImported={() => {
+            onImported();
+            setShowImport(false);
+          }}
+          onCancel={() => setShowImport(false)}
+        />
+      )}
     </div>
   );
 }

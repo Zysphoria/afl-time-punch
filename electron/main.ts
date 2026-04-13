@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, session } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import http from 'http';
@@ -19,8 +20,12 @@ async function startExpressServer(): Promise<void> {
     path.join(__dirname, '../server/dist/app.js')
   ).href;
   const { default: expressApp } = await import(serverPath);
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`Express server failed to start within 10 seconds on port ${SERVER_PORT}`));
+    }, 10_000);
     server = expressApp.listen(SERVER_PORT, '127.0.0.1', () => {
+      clearTimeout(timeout);
       console.log(`Express server listening on port ${SERVER_PORT}`);
       resolve();
     });
@@ -61,7 +66,39 @@ async function createWindow(): Promise<void> {
   }
 }
 
-app.whenReady().then(createWindow).catch((err) => {
+function setupAutoUpdater(): void {
+  // Private repo — electron-updater reads GH_TOKEN from env automatically
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'Zysphoria',
+    repo: 'afl-time-punch',
+  });
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-downloaded', () => {
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update Ready',
+      message: 'A new version has been downloaded and will be installed when you close the app.',
+      buttons: ['OK', 'Restart Now'],
+    }).then(({ response }) => {
+      if (response === 1) autoUpdater.quitAndInstall();
+    });
+  });
+
+  // Check silently — ignore any network/auth errors
+  autoUpdater.checkForUpdates().catch(() => {});
+}
+
+app.whenReady().then(async () => {
+  await createWindow();
+  if (!isDev) {
+    // Delay update check so it doesn't compete with app startup
+    setTimeout(setupAutoUpdater, 5000);
+  }
+}).catch((err) => {
   dialog.showErrorBox(
     'AFL Time Punch failed to start',
     err?.stack ?? String(err)

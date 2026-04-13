@@ -5,6 +5,7 @@ All notable changes to AFL Time Punch are documented here.
 ---
 
 ## [Unreleased]
+- `2970dd9` feat: convert to Electron desktop app with auto-changelog hook _(2026-04-13)_
 - `4a37995` chore: update package-lock.json after client dependency install _(2026-04-02)_
 
 ## [1.0.0] — 2026-04-13

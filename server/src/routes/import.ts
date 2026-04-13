@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import multer from 'multer';
-import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 import { getDb } from '../db.js';
 import { computeDurationSecs } from '../utils/duration.js';
 import type { Pause } from '../types.js';
@@ -17,11 +17,17 @@ const upload = multer({
   },
 });
 
+type CellValue = string | number | boolean | Date | null | undefined;
+
 /** Parse a cell value to a YYYY-MM-DD string, or null if unrecognised. */
-function parseDate(value: ExcelJS.CellValue): string | null {
-  if (!value) return null;
+function parseDate(value: CellValue): string | null {
+  if (value == null || value === '') return null;
   if (value instanceof Date) {
-    return value.toISOString().slice(0, 10);
+    // Use local date components — SheetJS Date objects represent calendar dates in local TZ
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
   const str = String(value).trim();
   if (!str) return null;
@@ -32,32 +38,46 @@ function parseDate(value: ExcelJS.CellValue): string | null {
   // MM/DD/YYYY or M/D/YYYY
   const mdyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (mdyMatch) {
-    const [, m, d, y] = mdyMatch;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const [, mo, d, y] = mdyMatch;
+    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
 
   // Let JS Date parse common English formats ("Apr 10, 2026", etc.)
   const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
 
   return null;
 }
 
 /** Parse a cell value into an ISO timestamp given the date string for that row. */
-function parseTime(value: ExcelJS.CellValue, dateStr: string): string | null {
-  if (!value) return null;
+function parseTime(value: CellValue, dateStr: string): string | null {
+  if (value == null || value === '') return null;
 
   if (value instanceof Date) {
-    // Excel time-only cells come back as Date objects anchored to 1899-12-30.
-    // Extract UTC hours/minutes to avoid timezone drift.
-    const h = value.getUTCHours();
-    const m = value.getUTCMinutes();
-    const s = value.getUTCSeconds();
-    // Constructing with a local-time string is intentional: in Electron the server
-    // runs in the same process as the user's OS, so local TZ === user's TZ.
+    // SheetJS creates time-only cells using the local-time Date constructor, so the
+    // time fraction (e.g. 0.34375 = 8:15 AM) is stored in local clock hours.
+    // Use getHours/getMinutes (local), not getUTCHours, to read the correct value.
+    const h = value.getHours();
+    const m = value.getMinutes();
+    const s = value.getSeconds();
+    // Building the ISO string from a local-time template is intentional: in Electron
+    // the server runs in the same process as the OS, so local TZ === user's TZ.
     return new Date(
       `${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
     ).toISOString();
+  }
+
+  // Numeric time fraction (e.g. 0.34375 = 8:15 AM) — fallback if cellDates didn't convert
+  if (typeof value === 'number' && value >= 0 && value < 1) {
+    const totalMins = Math.round(value * 24 * 60);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return new Date(`${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).toISOString();
   }
 
   const str = String(value).trim();
@@ -80,41 +100,41 @@ function parseTime(value: ExcelJS.CellValue, dateStr: string): string | null {
   return null;
 }
 
-router.post('/', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/', upload.single('file'), (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded. Ensure the file is a valid .xlsx under 10 MB.' });
   }
 
   const isPreview = req.query.preview === 'true';
 
-  const workbook = new ExcelJS.Workbook();
+  let workbook: XLSX.WorkBook;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await workbook.xlsx.load(req.file.buffer as any);
+    workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
   } catch {
     return res.status(400).json({ error: 'Could not parse file. Ensure it is a valid .xlsx file.' });
   }
 
-  const firstSheet = workbook.worksheets[0];
-  if (!firstSheet) {
+  if (workbook.SheetNames.length === 0) {
     return res.status(400).json({ error: 'Spreadsheet has no worksheets.' });
   }
 
-  // Collect header names from row 1
-  const headers: string[] = [];
-  const headerRow = firstSheet.getRow(1);
-  headerRow.eachCell({ includeEmpty: false }, cell => {
-    headers.push(String(cell.value ?? '').trim());
+  // Read headers from row 1 of the first sheet (SheetJS rows/cols are 0-based)
+  const firstWs = workbook.Sheets[workbook.SheetNames[0]];
+  const firstRows = XLSX.utils.sheet_to_json<CellValue[]>(firstWs, {
+    header: 1, raw: true, defval: null,
   });
+  const headers = ((firstRows[0] as CellValue[]) ?? [])
+    .map(v => String(v ?? '').trim())
+    .filter(Boolean);
 
   if (isPreview) return res.json(headers);
 
-  // Column indices (0-based from client, convert to 1-based for ExcelJS)
-  const dateColIdx = parseInt(String(req.body.dateCol ?? '0'), 10) + 1;
-  const clockInColIdx = parseInt(String(req.body.clockInCol ?? '1'), 10) + 1;
-  const clockOutColIdx = parseInt(String(req.body.clockOutCol ?? '2'), 10) + 1;
+  // Column indices are 0-based from client
+  const dateColIdx   = parseInt(String(req.body.dateCol    ?? '0'), 10);
+  const clockInColIdx  = parseInt(String(req.body.clockInCol  ?? '1'), 10);
+  const clockOutColIdx = parseInt(String(req.body.clockOutCol ?? '2'), 10);
   const breakColIdx = req.body.breakCol !== undefined && req.body.breakCol !== ''
-    ? parseInt(String(req.body.breakCol), 10) + 1
+    ? parseInt(String(req.body.breakCol), 10)
     : null;
 
   const db = getDb();
@@ -128,21 +148,26 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
 
   // Wrap all inserts in a single transaction — partial imports won't be committed on error
   const runImport = db.transaction(() => {
-    for (const sheet of workbook.worksheets) {
-      sheet.eachRow({ includeEmpty: false }, (row, rowNum) => {
-        if (rowNum === 1) return; // skip header
+    for (const sheetName of workbook.SheetNames) {
+      const ws = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json<CellValue[]>(ws, {
+        header: 1, raw: true, defval: null,
+      });
 
-        const dateCell = row.getCell(dateColIdx).value;
-        const dateStr = parseDate(dateCell);
-        if (!dateStr) return;
+      rows.forEach((row, rowIndex) => {
+        if (rowIndex === 0) return; // skip header row
 
+        const dateCell = (row as CellValue[])[dateColIdx];
         const rawDate = String(dateCell ?? '').trim().toUpperCase();
         if (rawDate === 'TOTAL' || rawDate === '') return;
 
-        const clockInISO = parseTime(row.getCell(clockInColIdx).value, dateStr);
+        const dateStr = parseDate(dateCell);
+        if (!dateStr) return;
+
+        const clockInISO = parseTime((row as CellValue[])[clockInColIdx], dateStr);
         if (!clockInISO) return;
 
-        const clockOutISO = parseTime(row.getCell(clockOutColIdx).value, dateStr);
+        const clockOutISO = parseTime((row as CellValue[])[clockOutColIdx], dateStr);
 
         // Deduplicate by clock_in
         if (existsStmt.get(clockInISO)) {
@@ -152,7 +177,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
 
         const pauses: Pause[] = [];
         if (breakColIdx !== null) {
-          const breakText = String(row.getCell(breakColIdx).value ?? '').trim();
+          const breakText = String((row as CellValue[])[breakColIdx] ?? '').trim();
           if (breakText) {
             // Zero-duration pause stores the comment without affecting duration calculation
             pauses.push({ start: clockInISO, end: clockInISO, comment: breakText });

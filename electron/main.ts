@@ -77,6 +77,15 @@ function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  autoUpdater.on('update-available', (info) => {
+    dialog.showMessageBox({
+      type: 'info',
+      title: 'Update Found',
+      message: `Version ${info.version} is downloading in the background. You'll be prompted to restart when it's ready.`,
+      buttons: ['OK'],
+    });
+  });
+
   autoUpdater.on('update-downloaded', () => {
     dialog.showMessageBox({
       type: 'info',
@@ -88,7 +97,15 @@ function setupAutoUpdater(): void {
     });
   });
 
-  // Check silently — ignore any network/auth errors
+  autoUpdater.on('error', (err) => {
+    dialog.showMessageBox({
+      type: 'error',
+      title: 'Update Check Failed',
+      message: `Could not check for updates: ${err.message}`,
+      buttons: ['OK'],
+    });
+  });
+
   autoUpdater.checkForUpdates().catch(() => {});
 }
 

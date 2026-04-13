@@ -77,6 +77,7 @@ export default function App() {
         sessions={sessions}
         selectedDay={selectedDay}
         onSelectDay={setSelectedDay}
+        hourlyRate={settings.hourly_rate}
       />
 
       <DetailPanel

@@ -7,14 +7,16 @@ import {
   getWeekStart,
   todayStr,
 } from '../utils/time.js';
+import { computePay, formatPay } from '../utils/pay.js';
 
 interface Props {
   sessions: Session[];
   selectedDay: string;           // YYYY-MM-DD
   onSelectDay: (day: string) => void;
+  hourlyRate: string;
 }
 
-export function Sidebar({ sessions, selectedDay, onSelectDay }: Props) {
+export function Sidebar({ sessions, selectedDay, onSelectDay, hourlyRate }: Props) {
   const today = todayStr();
   const currentWeekStart = getWeekStart(today);
 
@@ -49,6 +51,7 @@ export function Sidebar({ sessions, selectedDay, onSelectDay }: Props) {
       .filter(s => s.clock_out !== null)
       .reduce((sum, s) => sum + s.duration_secs, 0);
     const totalHrs = (totalSecs / 3600).toFixed(1);
+    const weekPay = computePay(totalSecs, hourlyRate);
     const days = getWeekDays(weekStart);
 
     return (
@@ -58,7 +61,7 @@ export function Sidebar({ sessions, selectedDay, onSelectDay }: Props) {
           onClick={() => toggleWeek(weekStart)}
         >
           <span>{isExpanded ? '▼' : '▶'} {getWeekLabel(weekStart)}</span>
-          <span style={{ fontSize: 12 }}>{totalHrs}h</span>
+          <span style={{ fontSize: 12 }}>{totalHrs}h · {formatPay(weekPay)}</span>
         </div>
         {isExpanded && days.map(day => {
           const daySessions = weekSessions.filter(s => s.date === day);

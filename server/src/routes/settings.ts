@@ -14,7 +14,8 @@ router.get('/', (_req: Request, res: Response) => {
 
 router.put('/', (req: Request, res: Response) => {
   const { hourly_rate } = req.body as { hourly_rate: string };
-  if (!hourly_rate || isNaN(parseFloat(hourly_rate))) {
+  const rate = parseFloat(hourly_rate);
+  if (!hourly_rate || isNaN(rate) || rate < 0) {
     return res.status(400).json({ error: 'Invalid hourly_rate value.' });
   }
   const db = getDb();

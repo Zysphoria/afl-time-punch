@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { getDb } from '../db.js';
 import type { Pause, SessionRow } from '../types.js';
-import { computeDurationSecs } from '../utils/duration.js';
+import { computeDurationSecs, localDateStr } from '../utils/duration.js';
 
 const router = Router();
 
@@ -16,7 +16,7 @@ function parseSession(row: SessionRow) {
 function weekEnd(saturday: string): string {
   const d = new Date(saturday + 'T00:00:00');
   d.setDate(d.getDate() + 6);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 router.get('/', (req: Request, res: Response) => {

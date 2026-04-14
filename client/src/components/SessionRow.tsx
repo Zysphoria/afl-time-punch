@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { Session, Pause } from '../types.js';
+import type { Session } from '../types.js';
 import { formatDuration, formatTime } from '../utils/time.js';
 import { computePay, formatPay } from '../utils/pay.js';
 
@@ -26,7 +26,7 @@ function localTimeToISO(date: string, localTime: string): string {
 
 export function SessionRow({ session, hourlyRate, elapsed, onEdit, onDelete }: Props) {
   const isActive = session.clock_out === null;
-  const isPaused = isActive && session.pauses.some((p: Pause) => !p.end);
+  const isPaused = isActive && session.pauses.some(p => !p.end);
 
   const [editMode, setEditMode] = useState(false);
   const [editClockIn, setEditClockIn] = useState('');
@@ -50,7 +50,7 @@ export function SessionRow({ session, hourlyRate, elapsed, onEdit, onDelete }: P
       const outISO = editClockOut ? localTimeToISO(session.date, editClockOut) : null;
       if (!outISO) return 0;
       const totalMs = new Date(outISO).getTime() - new Date(inISO).getTime();
-      const pauseMs = session.pauses.reduce((sum: number, p: Pause) => {
+      const pauseMs = session.pauses.reduce((sum, p) => {
         if (!p.end) return sum;
         return sum + (new Date(p.end).getTime() - new Date(p.start).getTime());
       }, 0);
@@ -88,7 +88,7 @@ export function SessionRow({ session, hourlyRate, elapsed, onEdit, onDelete }: P
         <span className="session-pay">{formatPay(pay)}</span>
 
         {/* Pause sub-rows */}
-        {session.pauses.map((p: Pause, i: number) => (
+        {session.pauses.map((p, i) => (
           <div key={i} className="session-row pause-entry" style={{ marginTop: 4, width: '100%', fontSize: 12 }}>
             <span className="text-yellow">⏸ Pause</span>
             <span className="text-muted" style={{ marginLeft: 8 }}>

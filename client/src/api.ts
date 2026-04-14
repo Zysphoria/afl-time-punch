@@ -2,11 +2,15 @@ import type { Session, Settings } from './types.js';
 
 const BASE = '/api';
 
-async function handleResponse<T>(res: Response): Promise<T> {
+async function throwIfNotOk(res: Response): Promise<void> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   }
+}
+
+async function handleResponse<T>(res: Response): Promise<T> {
+  await throwIfNotOk(res);
   return res.json() as Promise<T>;
 }
 
@@ -122,10 +126,7 @@ export async function editSessionTimes(
 
 export async function deleteSession(id: number): Promise<void> {
   const res = await fetch(`${BASE}/sessions/${id}`, { method: 'DELETE' });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
-  }
+  await throwIfNotOk(res);
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Session } from '../types.js';
 import { formatDuration, todayStr, getWeekKey } from '../utils/time.js';
 import { computePay, formatPay } from '../utils/pay.js';
@@ -36,11 +36,12 @@ export function TopBar({
   const [rateInput, setRateInput] = useState(hourlyRate);
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const rateInputRef = useRef<HTMLInputElement>(null);
   const isPaused = activeSession?.pauses.some(p => !p.end) ?? false;
 
   // Sync external rate changes into local input only when the field isn't focused
   useEffect(() => {
-    if (document.activeElement?.className !== 'rate-input') {
+    if (document.activeElement !== rateInputRef.current) {
       setRateInput(hourlyRate);
     }
   }, [hourlyRate]);
@@ -122,6 +123,7 @@ export function TopBar({
       <div className="rate-input-wrap">
         <span>$/hr</span>
         <input
+          ref={rateInputRef}
           className="rate-input"
           type="number"
           min="0"

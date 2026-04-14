@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import ExcelJS from 'exceljs';
 import { getDb } from '../db.js';
 import type { Pause, SessionRow } from '../types.js';
+import { localDateStr } from '../utils/duration.js';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ interface ParsedSession {
 function weekFriday(saturday: string): string {
   const d = new Date(saturday + 'T00:00:00');
   d.setDate(d.getDate() + 6);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 function weekSaturday(dateStr: string): string {
@@ -27,7 +28,7 @@ function weekSaturday(dateStr: string): string {
   const day = d.getDay();
   const diff = day === 6 ? 0 : -(day + 1);
   d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 }
 
 function weekLabel(saturday: string): string {
@@ -99,7 +100,7 @@ router.get('/', async (req: Request, res: Response) => {
 
   for (const saturday of sortedWeeks) {
     const weekSessions = weekMap.get(saturday)!;
-    const sheetName = weekLabel(saturday).replace(/[:\\\/\?\*\[\]]/g, '-');
+    const sheetName = weekLabel(saturday).replace(/[:\\\/\?\*\[\]]/g, '-').slice(0, 31);
     const sheet = workbook.addWorksheet(sheetName);
 
     sheet.columns = [

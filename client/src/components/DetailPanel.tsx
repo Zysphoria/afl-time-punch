@@ -40,27 +40,29 @@ export function DetailPanel({
     <div className="detail-panel">
       <WeekSummary sessions={weekSessions} hourlyRate={hourlyRate} />
 
-      <div className="detail-header">
-        <h2>{formatDayLabel(selectedDay)}</h2>
-        <div className="day-totals">
-          {(completedDaySecs / 3600).toFixed(2)}h worked &nbsp;·&nbsp; {formatPay(dayPay)} earned
+      <div className="detail-content">
+        <div className="detail-header">
+          <h2>{formatDayLabel(selectedDay)}</h2>
+          <div className="day-totals">
+            {(completedDaySecs / 3600).toFixed(2)}h worked &nbsp;·&nbsp; {formatPay(dayPay)} earned
+          </div>
         </div>
-      </div>
 
-      <div className="session-list">
-        {daySessions.length === 0 && (
-          <p className="text-muted">No sessions recorded for this day.</p>
-        )}
-        {daySessions.map(s => (
-          <SessionRow
-            key={s.id}
-            session={s}
-            hourlyRate={hourlyRate}
-            elapsed={activeSession?.id === s.id ? elapsed : s.duration_secs}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        ))}
+        <div className="session-list">
+          {daySessions.length === 0 && (
+            <p className="text-muted">No sessions recorded for this day.</p>
+          )}
+          {daySessions.map(s => (
+            <SessionRow
+              key={s.id}
+              session={s}
+              hourlyRate={hourlyRate}
+              elapsed={activeSession?.id === s.id ? elapsed : s.duration_secs}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );

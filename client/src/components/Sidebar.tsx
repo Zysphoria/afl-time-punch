@@ -33,6 +33,8 @@ export function Sidebar({ sessions, selectedDay, onSelectDay, hourlyRate }: Prop
     new Set([currentWeekStart])
   );
 
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   function toggleWeek(weekStart: string) {
     setExpandedWeeks(prev => {
       const next = new Set(prev);
@@ -74,6 +76,13 @@ export function Sidebar({ sessions, selectedDay, onSelectDay, hourlyRate }: Prop
     () => [...pastWeeksByYear.keys()].sort().reverse(),
     [pastWeeksByYear]
   );
+
+  // Current week seconds — used to include in the matching year total
+  const currentWeekSecs = useMemo(() => {
+    return (weekMap.get(currentWeekStart) ?? [])
+      .filter(s => s.clock_out !== null)
+      .reduce((sum, s) => sum + s.duration_secs, 0);
+  }, [weekMap, currentWeekStart]);
 
   function renderWeek(weekStart: string, isCurrent: boolean) {
     const weekSessions = weekMap.get(weekStart) ?? [];
@@ -122,35 +131,49 @@ export function Sidebar({ sessions, selectedDay, onSelectDay, hourlyRate }: Prop
   }
 
   return (
-    <div className="sidebar">
-      <div className="sidebar-section-label">Current Week</div>
-      {renderWeek(currentWeekStart, true)}
+    <div className={`sidebar${isCollapsed ? ' collapsed' : ''}`}>
+      <button
+        className="sidebar-toggle"
+        onClick={() => setIsCollapsed(prev => !prev)}
+        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        {isCollapsed ? '▶' : '◀'}
+      </button>
 
-      {sortedYears.map(year => {
-        const weeks = pastWeeksByYear.get(year)!;
-        const isExpanded = expandedYears.has(year);
-        const yearSecs = weeks.reduce((sum, w) => {
-          const wSessions = weekMap.get(w) ?? [];
-          return sum + wSessions
-            .filter(s => s.clock_out !== null)
-            .reduce((s2, s) => s2 + s.duration_secs, 0);
-        }, 0);
-        const yearHrs = (yearSecs / 3600).toFixed(1);
-        const yearPay = computePay(yearSecs, hourlyRate);
+      {!isCollapsed && (
+        <>
+          <div className="sidebar-section-label">Current Week</div>
+          {renderWeek(currentWeekStart, true)}
 
-        return (
-          <div key={year}>
-            <div
-              className="sidebar-year-header"
-              onClick={() => toggleYear(year)}
-            >
-              <span>{isExpanded ? '▼' : '▶'} {year}</span>
-              <span>{yearHrs}h · {formatPay(yearPay)}</span>
-            </div>
-            {isExpanded && weeks.map(w => renderWeek(w, false))}
-          </div>
-        );
-      })}
+          {sortedYears.map(year => {
+            const weeks = pastWeeksByYear.get(year)!;
+            const isExpanded = expandedYears.has(year);
+            // Include current week in the year total if it belongs to this year
+            const currentWeekBonus = getYear(currentWeekStart) === year ? currentWeekSecs : 0;
+            const yearSecs = currentWeekBonus + weeks.reduce((sum, w) => {
+              const wSessions = weekMap.get(w) ?? [];
+              return sum + wSessions
+                .filter(s => s.clock_out !== null)
+                .reduce((s2, s) => s2 + s.duration_secs, 0);
+            }, 0);
+            const yearHrs = (yearSecs / 3600).toFixed(1);
+            const yearPay = computePay(yearSecs, hourlyRate);
+
+            return (
+              <div key={year}>
+                <div
+                  className="sidebar-year-header"
+                  onClick={() => toggleYear(year)}
+                >
+                  <span>{isExpanded ? '▼' : '▶'} {year}</span>
+                  <span>{yearHrs}h · {formatPay(yearPay)}</span>
+                </div>
+                {isExpanded && weeks.map(w => renderWeek(w, false))}
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

@@ -34,7 +34,7 @@ html, body, #root {
 .app-layout {
   display: grid;
   grid-template-rows: auto 1fr;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: auto 1fr;
   grid-template-areas:
     "topbar topbar"
     "sidebar detail";
@@ -62,9 +62,42 @@ html, body, #root {
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px 0;
+  width: 260px;
+  transition: width 0.2s ease;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+}
+
+.sidebar.collapsed {
+  width: 36px;
+  padding: 8px 0;
+}
+
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 4px 8px auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  margin: 0 auto 8px;
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .sidebar::-webkit-scrollbar {
@@ -87,6 +120,10 @@ html, body, #root {
 .detail-panel {
   grid-area: detail;
   overflow-y: auto;
+  padding: 0;
+}
+
+.detail-content {
   padding: 24px;
 }
 
@@ -406,13 +443,11 @@ html, body, #root {
 
 .week-summary {
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
   display: flex;
   gap: 32px;
   flex-wrap: wrap;
-  margin-top: 8px;
 }
 
 .summary-item {

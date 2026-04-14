@@ -216,6 +216,41 @@ html, body, #root {
   font-weight: 600;
 }
 
+.sidebar-year-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-year-header > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sidebar-year-header > span:last-child {
+  flex-shrink: 0;
+  padding-left: 6px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.sidebar-year-header:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
 .sidebar-day-row {
   display: flex;
   align-items: center;

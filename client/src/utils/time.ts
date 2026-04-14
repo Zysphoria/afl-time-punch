@@ -108,6 +108,11 @@ export function formatDayLabel(dateStr: string): string {
   });
 }
 
+/** Extract the 4-digit year string from a YYYY-MM-DD date string */
+export function getYear(dateStr: string): string {
+  return dateStr.slice(0, 4);
+}
+
 /** Today's date as YYYY-MM-DD (local calendar, not UTC) */
 export function todayStr(): string {
   return localDateStr(new Date());

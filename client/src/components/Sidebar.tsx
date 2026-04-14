@@ -5,6 +5,7 @@ import {
   getWeekLabel,
   getWeekDays,
   getWeekStart,
+  getYear,
   todayStr,
 } from '../utils/time.js';
 import { computePay, formatPay } from '../utils/pay.js';
@@ -43,6 +44,36 @@ export function Sidebar({ sessions, selectedDay, onSelectDay, hourlyRate }: Prop
 
   // Separate current week from past weeks
   const pastWeeks = sortedWeeks.filter(w => w !== currentWeekStart);
+
+  // Group past weeks by year (descending), default current year expanded
+  const currentYear = getYear(currentWeekStart);
+  const [expandedYears, setExpandedYears] = useState<Set<string>>(
+    new Set([currentYear])
+  );
+
+  function toggleYear(year: string) {
+    setExpandedYears(prev => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  }
+
+  const pastWeeksByYear = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const w of pastWeeks) {
+      const yr = getYear(w);
+      if (!map.has(yr)) map.set(yr, []);
+      map.get(yr)!.push(w);
+    }
+    return map;
+  }, [pastWeeks]);
+
+  const sortedYears = useMemo(
+    () => [...pastWeeksByYear.keys()].sort().reverse(),
+    [pastWeeksByYear]
+  );
 
   function renderWeek(weekStart: string, isCurrent: boolean) {
     const weekSessions = weekMap.get(weekStart) ?? [];
@@ -95,12 +126,31 @@ export function Sidebar({ sessions, selectedDay, onSelectDay, hourlyRate }: Prop
       <div className="sidebar-section-label">Current Week</div>
       {renderWeek(currentWeekStart, true)}
 
-      {pastWeeks.length > 0 && (
-        <>
-          <div className="sidebar-section-label" style={{ marginTop: 12 }}>Past Weeks</div>
-          {pastWeeks.map(w => renderWeek(w, false))}
-        </>
-      )}
+      {sortedYears.map(year => {
+        const weeks = pastWeeksByYear.get(year)!;
+        const isExpanded = expandedYears.has(year);
+        const yearSecs = weeks.reduce((sum, w) => {
+          const wSessions = weekMap.get(w) ?? [];
+          return sum + wSessions
+            .filter(s => s.clock_out !== null)
+            .reduce((s2, s) => s2 + s.duration_secs, 0);
+        }, 0);
+        const yearHrs = (yearSecs / 3600).toFixed(1);
+        const yearPay = computePay(yearSecs, hourlyRate);
+
+        return (
+          <div key={year}>
+            <div
+              className="sidebar-year-header"
+              onClick={() => toggleYear(year)}
+            >
+              <span>{isExpanded ? '▼' : '▶'} {year}</span>
+              <span>{yearHrs}h · {formatPay(yearPay)}</span>
+            </div>
+            {isExpanded && weeks.map(w => renderWeek(w, false))}
+          </div>
+        );
+      })}
     </div>
   );
 }

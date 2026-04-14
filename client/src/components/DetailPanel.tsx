@@ -38,6 +38,8 @@ export function DetailPanel({
 
   return (
     <div className="detail-panel">
+      <WeekSummary sessions={weekSessions} hourlyRate={hourlyRate} />
+
       <div className="detail-header">
         <h2>{formatDayLabel(selectedDay)}</h2>
         <div className="day-totals">
@@ -60,8 +62,6 @@ export function DetailPanel({
           />
         ))}
       </div>
-
-      <WeekSummary sessions={weekSessions} hourlyRate={hourlyRate} />
     </div>
   );
 }

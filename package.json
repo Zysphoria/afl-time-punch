@@ -51,6 +51,7 @@
       "node_modules/**/*",
       "server/node_modules/**/*"
     ],
+    "artifactName": "AFL-Time-Punch-Setup-${version}.${ext}",
     "win": {
       "target": [
         "nsis"
